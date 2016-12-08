@@ -54,11 +54,18 @@ void unimplemented(int);
 /**********************************************************************/
 void accept_request(void *arg)
 {
+    /// @alex: 居然有intptr_t这个类型...
     int client = (intptr_t)arg;
     char buf[1024];
     size_t numchars;
+
+    /// @alex: 方法最长255个字符
     char method[255];
+
+    /// @alex: url最长255个字符
     char url[255];
+
+    /// @alex: 路径最长512
     char path[512];
     size_t i, j;
     struct stat st;
@@ -67,6 +74,10 @@ void accept_request(void *arg)
     char *query_string = NULL;
 
     numchars = get_line(client, buf, sizeof(buf));
+    printf("received line {%s}\n", buf);
+
+
+    /// @alex:先读取method
     i = 0; j = 0;
     while (!ISspace(buf[i]) && (i < sizeof(method) - 1))
     {
@@ -76,6 +87,7 @@ void accept_request(void *arg)
     j=i;
     method[i] = '\0';
 
+    /// @alex: 判断方法是否是GET/POST
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
     {
         unimplemented(client);
@@ -86,8 +98,12 @@ void accept_request(void *arg)
         cgi = 1;
 
     i = 0;
+
+    /// @alex: 跳过空格
     while (ISspace(buf[j]) && (j < numchars))
         j++;
+
+    /// @alex: 读取url
     while (!ISspace(buf[j]) && (i < sizeof(url) - 1) && (j < numchars))
     {
         url[i] = buf[j];
@@ -95,6 +111,7 @@ void accept_request(void *arg)
     }
     url[i] = '\0';
 
+    /// @alex: get方法处理"?"
     if (strcasecmp(method, "GET") == 0)
     {
         query_string = url;
@@ -104,13 +121,16 @@ void accept_request(void *arg)
         {
             cgi = 1;
             *query_string = '\0';
-            query_string++;
+            query_string++; /// @alex: query_string表示的是"?"后面的部分
         }
     }
 
+    /// @alex: url就是"?"前的部分
     sprintf(path, "htdocs%s", url);
     if (path[strlen(path) - 1] == '/')
         strcat(path, "index.html");
+
+    /// @alex: 判断path的属性
     if (stat(path, &st) == -1) {
         while ((numchars > 0) && strcmp("\n", buf))  /* read & discard headers */
             numchars = get_line(client, buf, sizeof(buf));
@@ -120,11 +140,14 @@ void accept_request(void *arg)
     {
         if ((st.st_mode & S_IFMT) == S_IFDIR)
             strcat(path, "/index.html");
+
+        /// @alex: 具有可执行权限
         if ((st.st_mode & S_IXUSR) ||
                 (st.st_mode & S_IXGRP) ||
                 (st.st_mode & S_IXOTH)    )
             cgi = 1;
         if (!cgi)
+            /// @alex: send header and index.html
             serve_file(client, path);
         else
             execute_cgi(client, path, method, query_string);
@@ -227,6 +250,7 @@ void execute_cgi(int client, const char *path,
     else if (strcasecmp(method, "POST") == 0) /*POST*/
     {
         numchars = get_line(client, buf, sizeof(buf));
+        /// @alex: 读取的不是空行
         while ((numchars > 0) && strcmp("\n", buf))
         {
             buf[15] = '\0';
@@ -317,14 +341,19 @@ int get_line(int sock, char *buf, int size)
     char c = '\0';
     int n;
 
+    /// @alex: 如果没有遇到"\n"或者字节数小于size，会一直在同步等待，
+    /// 直到对方断开连接
     while ((i < size - 1) && (c != '\n'))
     {
+        /// @alex: 同步接收
         n = recv(sock, &c, 1, 0);
         /* DEBUG printf("%02X\n", c); */
+        printf("%d\n", n);
         if (n > 0)
         {
             if (c == '\r')
             {
+                /// @alex: 这个是在一个字符一个字符的接收
                 n = recv(sock, &c, 1, MSG_PEEK);
                 /* DEBUG printf("%02X\n", c); */
                 if ((n > 0) && (c == '\n'))
@@ -431,6 +460,7 @@ int startup(u_short *port)
     int httpd = 0;
     struct sockaddr_in name;
 
+    /// @alex: create socket
     httpd = socket(PF_INET, SOCK_STREAM, 0);
     if (httpd == -1)
         error_die("socket");
@@ -438,6 +468,8 @@ int startup(u_short *port)
     name.sin_family = AF_INET;
     name.sin_port = htons(*port);
     name.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    /// @alex: bind
     if (bind(httpd, (struct sockaddr *)&name, sizeof(name)) < 0)
         error_die("bind");
     if (*port == 0)  /* if dynamically allocating a port */
@@ -447,6 +479,8 @@ int startup(u_short *port)
             error_die("getsockname");
         *port = ntohs(name.sin_port);
     }
+
+    /// @alex: listen
     if (listen(httpd, 5) < 0)
         error_die("listen");
     return(httpd);
@@ -484,7 +518,7 @@ void unimplemented(int client)
 int main(void)
 {
     int server_sock = -1;
-    u_short port = 4000;
+    u_short port = 4001;
     int client_sock = -1;
     struct sockaddr_in client_name;
     socklen_t  client_name_len = sizeof(client_name);
