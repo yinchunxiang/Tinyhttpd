@@ -86,6 +86,7 @@ void accept_request(void *arg)
     }
     j=i;
     method[i] = '\0';
+    printf("method => {%s}\n", method);
 
     /// @alex: 判断方法是否是GET/POST
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
@@ -110,6 +111,7 @@ void accept_request(void *arg)
         i++; j++;
     }
     url[i] = '\0';
+    printf("url => {%s}\n", url);
 
     /// @alex: get方法处理"?"
     if (strcasecmp(method, "GET") == 0)
@@ -124,16 +126,21 @@ void accept_request(void *arg)
             query_string++; /// @alex: query_string表示的是"?"后面的部分
         }
     }
+    printf("query_string => {%s}\n", query_string);
 
     /// @alex: url就是"?"前的部分
     sprintf(path, "htdocs%s", url);
-    if (path[strlen(path) - 1] == '/')
+    printf("path => {%s}\n", path);
+    if (path[strlen(path) - 1] == '/') {
         strcat(path, "index.html");
+    }
 
     /// @alex: 判断path的属性
     if (stat(path, &st) == -1) {
-        while ((numchars > 0) && strcmp("\n", buf))  /* read & discard headers */
+        printf("not find file\n");
+        while ((numchars > 0) && strcmp("\n", buf)) {  /* read & discard headers */
             numchars = get_line(client, buf, sizeof(buf));
+        }
         not_found(client);
     }
     else
@@ -142,15 +149,18 @@ void accept_request(void *arg)
             strcat(path, "/index.html");
 
         /// @alex: 具有可执行权限
-        if ((st.st_mode & S_IXUSR) ||
-                (st.st_mode & S_IXGRP) ||
-                (st.st_mode & S_IXOTH)    )
+        if ((st.st_mode & S_IXUSR) || (st.st_mode & S_IXGRP) || (st.st_mode & S_IXOTH)) {
             cgi = 1;
-        if (!cgi)
+        }
+        if (!cgi) {
+            printf("==> serve file\n");
             /// @alex: send header and index.html
             serve_file(client, path);
-        else
+        }
+        else {
+            printf("==> execute cgi\n");
             execute_cgi(client, path, method, query_string);
+        }
     }
 
     close(client);
@@ -243,12 +253,14 @@ void execute_cgi(int client, const char *path,
     int numchars = 1;
     int content_length = -1;
 
+    /// @alex: 保证进入下面的while循环
     buf[0] = 'A'; buf[1] = '\0';
     if (strcasecmp(method, "GET") == 0)
         while ((numchars > 0) && strcmp("\n", buf))  /* read & discard headers */
             numchars = get_line(client, buf, sizeof(buf));
     else if (strcasecmp(method, "POST") == 0) /*POST*/
     {
+        /// @alex: 读取header
         numchars = get_line(client, buf, sizeof(buf));
         /// @alex: 读取的不是空行
         while ((numchars > 0) && strcmp("\n", buf))
@@ -267,32 +279,42 @@ void execute_cgi(int client, const char *path,
     {
     }
 
-
+    printf("===> pipe cgi_output\n");
     if (pipe(cgi_output) < 0) {
         cannot_execute(client);
         return;
     }
+
+    printf("===> pipe cgi_input\n");
     if (pipe(cgi_input) < 0) {
         cannot_execute(client);
         return;
     }
 
+    printf("===> fork\n");
     if ( (pid = fork()) < 0 ) {
         cannot_execute(client);
         return;
     }
+
+
     sprintf(buf, "HTTP/1.0 200 OK\r\n");
+    printf("buf => {%s}\n", buf);
     send(client, buf, strlen(buf), 0);
     if (pid == 0)  /* child: CGI script */
     {
+        printf("==> in child \n");
         char meth_env[255];
         char query_env[255];
         char length_env[255];
 
+        /// @alex: 修改stdin/stdout
         dup2(cgi_output[1], STDOUT);
         dup2(cgi_input[0], STDIN);
         close(cgi_output[0]);
         close(cgi_input[1]);
+
+        /// @alex: 设置环境变量
         sprintf(meth_env, "REQUEST_METHOD=%s", method);
         putenv(meth_env);
         if (strcasecmp(method, "GET") == 0) {
@@ -303,21 +325,34 @@ void execute_cgi(int client, const char *path,
             sprintf(length_env, "CONTENT_LENGTH=%d", content_length);
             putenv(length_env);
         }
-        execl(path, NULL);
+
+        /// @alex: 执行cgi脚本
+        if (-1 == execl(path, NULL)) {
+            printf("execute path{%s} failed\n", path);
+        }
+
+        /// @alex: 子进程退出，所有句柄将会关闭，无需手动关闭了
         exit(0);
     } else {    /* parent */
+        printf("==> in parent \n");
         close(cgi_output[1]);
         close(cgi_input[0]);
-        if (strcasecmp(method, "POST") == 0)
+        if (strcasecmp(method, "POST") == 0) {
             for (i = 0; i < content_length; i++) {
                 recv(client, &c, 1, 0);
                 write(cgi_input[1], &c, 1);
+                printf("parent: %c\n", c);
             }
-        while (read(cgi_output[0], &c, 1) > 0)
+        }
+        while (read(cgi_output[0], &c, 1) > 0) {
+            printf("read from cgi_output => %c\n", c);
             send(client, &c, 1, 0);
+        }
 
+        /// @alex: 关闭句柄防止泄露
         close(cgi_output[0]);
         close(cgi_input[1]);
+        /// @alex: 等待子进程退出
         waitpid(pid, &status, 0);
     }
 }
@@ -348,7 +383,6 @@ int get_line(int sock, char *buf, int size)
         /// @alex: 同步接收
         n = recv(sock, &c, 1, 0);
         /* DEBUG printf("%02X\n", c); */
-        printf("%d\n", n);
         if (n > 0)
         {
             if (c == '\r')
@@ -437,10 +471,10 @@ void serve_file(int client, const char *filename)
         numchars = get_line(client, buf, sizeof(buf));
 
     resource = fopen(filename, "r");
-    if (resource == NULL)
+    if (resource == NULL) {
+        printf("not find file{%s}\n", filename);
         not_found(client);
-    else
-    {
+    } else {
         headers(client, filename);
         cat(client, resource);
     }

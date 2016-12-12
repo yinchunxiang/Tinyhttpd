@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <memory.h>
 
 int main(int argc, char *argv[])
 {
@@ -13,7 +14,8 @@ int main(int argc, char *argv[])
     struct sockaddr_in address;
     int result;
     ///char ch = 'A';
-    char ch[1024] = {'A', '\n'};
+    ///char ch[1024] = "GET index.html\n\n";
+    char ch[1024] = "GET / HTTP/1.1\n\n";
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     address.sin_family = AF_INET;
@@ -28,7 +30,9 @@ int main(int argc, char *argv[])
         exit(1);
     }
     ///write(sockfd, &ch, 1);
-    write(sockfd, ch, 2);
+    write(sockfd, ch, sizeof(ch));
+
+    memset(ch, 0, 1024);
     ///read(sockfd, &ch, 1);
     read(sockfd, ch, 1024);
     printf("char from server = \n{\n%s}\n", ch);

@@ -43,3 +43,9 @@ A mirror for tinyhttpd
 <p>&nbsp; &nbsp; （10） 关闭与浏览器的连接，完成了一次 HTTP 请求与回应，因为 HTTP 是无连接的。</p>
 <p><br>
 </p>
+
+
+## 总结 ##
+有些函数不熟悉了需要查查才能知道
+debug的时候，直接用浏览器就行，代码里的client太简单，不能很好的debug。
+用这个client进行debug容易被误导(个人体验)...
